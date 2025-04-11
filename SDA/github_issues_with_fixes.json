@@ -1,0 +1,232 @@
+[
+  {
+    "repo": "pallets/flask",
+    "issue_number": 3299,
+    "issue_title": "pass sys.argv to flask cli",
+    "issue_body": "closes #3297 \r\n\r\nCan be removed when pallets/click#536 is fixed.",
+    "patch": "@@ -57,4 +57,4 @@\n from .templating import render_template\n from .templating import render_template_string\n \n-__version__ = \"1.1.1\"\n+__version__ = \"1.1.2.dev\"",
+    "file_name": "src/flask/__init__.py",
+    "pr_number": 3299,
+    "pr_url": "https://github.com/pallets/flask/pull/3299"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 3299,
+    "issue_title": "pass sys.argv to flask cli",
+    "issue_body": "closes #3297 \r\n\r\nCan be removed when pallets/click#536 is fixed.",
+    "patch": "@@ -963,7 +963,8 @@ def routes_command(sort, all_methods):\n \n \n def main(as_module=False):\n-    cli.main(prog_name=\"python -m flask\" if as_module else None)\n+    # TODO omit sys.argv once https://github.com/pallets/click/issues/536 is fixed\n+    cli.main(args=sys.argv[1:], prog_name=\"python -m flask\" if as_module else None)\n \n \n if __name__ == \"__main__\":",
+    "file_name": "src/flask/cli.py",
+    "pr_number": 3299,
+    "pr_url": "https://github.com/pallets/flask/pull/3299"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2739,
+    "issue_title": "Only trap key errors by default in debug, not all BadRequest errors",
+    "issue_body": "closes #2735 \r\n\r\nIn order to make debugging key errors from `request.form` easier, #2348 trapped `BadRequest` errors by default in debug mode. However, this caught *all* `BadRequest` errors, not just `BadRequestKeyError`. This changes the behavior so `BadRequestKeyError` is caught in debug mode, but `abort(400)` still passes through.",
+    "patch": "@@ -1663,8 +1663,14 @@ def trap_http_exception(self, e):\n \n         trap_bad_request = self.config['TRAP_BAD_REQUEST_ERRORS']\n \n-        # if unset, trap based on debug mode\n-        if (trap_bad_request is None and self.debug) or trap_bad_request:\n+        # if unset, trap key errors in debug mode\n+        if (\n+            trap_bad_request is None and self.debug\n+            and isinstance(e, BadRequestKeyError)\n+        ):\n+            return True\n+\n+        if trap_bad_request:\n             return isinstance(e, BadRequest)\n \n         return False",
+    "file_name": "flask/app.py",
+    "pr_number": 2739,
+    "pr_url": "https://github.com/pallets/flask/pull/2739"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2739,
+    "issue_title": "Only trap key errors by default in debug, not all BadRequest errors",
+    "issue_body": "closes #2735 \r\n\r\nIn order to make debugging key errors from `request.form` easier, #2348 trapped `BadRequest` errors by default in debug mode. However, this caught *all* `BadRequest` errors, not just `BadRequestKeyError`. This changes the behavior so `BadRequestKeyError` is caught in debug mode, but `abort(400)` still passes through.",
+    "patch": "@@ -1027,21 +1027,34 @@ def raise_e3():\n \n \n def test_trapping_of_bad_request_key_errors(app, client):\n-    @app.route('/fail')\n+    @app.route('/key')\n     def fail():\n         flask.request.form['missing_key']\n \n-    rv = client.get('/fail')\n+    @app.route('/abort')\n+    def allow_abort():\n+        flask.abort(400)\n+\n+    rv = client.get('/key')\n     assert rv.status_code == 400\n     assert b'missing_key' not in rv.data\n+    rv = client.get('/abort')\n+    assert rv.status_code == 400\n \n-    app.config['TRAP_BAD_REQUEST_ERRORS'] = True\n-\n+    app.debug = True\n     with pytest.raises(KeyError) as e:\n-        client.get(\"/fail\")\n-\n+        client.get(\"/key\")\n     assert e.errisinstance(BadRequest)\n     assert 'missing_key' in e.value.description\n+    rv = client.get('/abort')\n+    assert rv.status_code == 400\n+\n+    app.debug = False\n+    app.config['TRAP_BAD_REQUEST_ERRORS'] = True\n+    with pytest.raises(KeyError):\n+        client.get('/key')\n+    with pytest.raises(BadRequest):\n+        client.get('/abort')\n \n \n def test_trapping_of_all_http_exceptions(app, client):",
+    "file_name": "tests/test_basic.py",
+    "pr_number": 2739,
+    "pr_url": "https://github.com/pallets/flask/pull/2739"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2738,
+    "issue_title": "merge slashes between blueprint prefix and rule",
+    "issue_body": "closes #2731 \r\n\r\nWhen registering a blueprint, strip `/` from the right side of the prefix and the left side of each rule, then join to ensure there's only one slash. #2629 only considered the prefix, and only stripped one slash.",
+    "patch": "@@ -49,12 +49,10 @@ def __init__(self, blueprint, app, options, first_registration):\n         url_prefix = self.options.get('url_prefix')\n         if url_prefix is None:\n             url_prefix = self.blueprint.url_prefix\n-\n+        if url_prefix:\n+            url_prefix = url_prefix.rstrip('/')\n         #: The prefix that should be used for all URLs defined on the\n         #: blueprint.\n-        if url_prefix and url_prefix[-1] == '/':\n-            url_prefix = url_prefix[:-1]\n-\n         self.url_prefix = url_prefix\n \n         #: A dictionary with URL defaults that is added to each and every\n@@ -68,7 +66,7 @@ def add_url_rule(self, rule, endpoint=None, view_func=None, **options):\n         blueprint's name.\n         \"\"\"\n         if self.url_prefix:\n-            rule = self.url_prefix + rule\n+            rule = '/'.join((self.url_prefix, rule.lstrip('/')))\n         options.setdefault('subdomain', self.subdomain)\n         if endpoint is None:\n             endpoint = _endpoint_from_view_func(view_func)",
+    "file_name": "flask/blueprints.py",
+    "pr_number": 2738,
+    "pr_url": "https://github.com/pallets/flask/pull/2738"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2738,
+    "issue_title": "merge slashes between blueprint prefix and rule",
+    "issue_body": "closes #2731 \r\n\r\nWhen registering a blueprint, strip `/` from the right side of the prefix and the left side of each rule, then join to ensure there's only one slash. #2629 only considered the prefix, and only stripped one slash.",
+    "patch": "@@ -115,17 +115,22 @@ def bp_forbidden():\n     assert client.get('/nope').data == b'you shall not pass'\n \n \n-def test_blueprint_prefix_slash(app, client):\n-    bp = flask.Blueprint('test', __name__, url_prefix='/bar/')\n-\n-    @bp.route('/foo')\n-    def foo():\n+@pytest.mark.parametrize(('prefix', 'rule', 'url'), (\n+    ('/foo/', '/bar', '/foo/bar'),\n+    ('/foo/', 'bar', '/foo/bar'),\n+    ('/foo', '/bar', '/foo/bar'),\n+    ('/foo/', '//bar', '/foo/bar'),\n+    ('/foo//', '/bar', '/foo/bar'),\n+))\n+def test_blueprint_prefix_slash(app, client, prefix, rule, url):\n+    bp = flask.Blueprint('test', __name__, url_prefix=prefix)\n+\n+    @bp.route(rule)\n+    def index():\n         return '', 204\n \n     app.register_blueprint(bp)\n-    app.register_blueprint(bp, url_prefix='/spam/')\n-    assert client.get('/bar/foo').status_code == 204\n-    assert client.get('/spam/foo').status_code == 204\n+    assert client.get(url).status_code == 204\n \n \n def test_blueprint_url_defaults(app, client):",
+    "file_name": "tests/test_blueprints.py",
+    "pr_number": 2738,
+    "pr_url": "https://github.com/pallets/flask/pull/2738"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2730,
+    "issue_title": "Fix registering partials as view functions",
+    "issue_body": "",
+    "patch": "@@ -201,7 +201,7 @@ def add_url_rule(self, rule, endpoint=None, view_func=None, **options):\n         \"\"\"\n         if endpoint:\n             assert '.' not in endpoint, \"Blueprint endpoints should not contain dots\"\n-        if view_func:\n+        if view_func and hasattr(view_func, '__name__'):\n             assert '.' not in view_func.__name__, \"Blueprint view function name should not contain dots\"\n         self.record(lambda s:\n             s.add_url_rule(rule, endpoint, view_func, **options))",
+    "file_name": "flask/blueprints.py",
+    "pr_number": 2730,
+    "pr_url": "https://github.com/pallets/flask/pull/2730"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2730,
+    "issue_title": "Fix registering partials as view functions",
+    "issue_body": "",
+    "patch": "@@ -9,6 +9,7 @@\n     :license: BSD, see LICENSE for more details.\n \"\"\"\n \n+import functools\n import pytest\n \n import flask\n@@ -382,6 +383,8 @@ def foo_foo_foo():\n         )\n     )\n \n+    bp.add_url_rule('/bar/456', endpoint='foofoofoo', view_func=functools.partial(foo_foo_foo))\n+\n     app.register_blueprint(bp, url_prefix='/py')\n \n     assert client.get('/py/foo').data == b'bp.foo'",
+    "file_name": "tests/test_blueprints.py",
+    "pr_number": 2730,
+    "pr_url": "https://github.com/pallets/flask/pull/2730"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2284,
+    "issue_title": "safe_join on Windows uses posixpath",
+    "issue_body": "Python on Windows supports mixed `/` and `\\` separators, so this doesn't break anything. `/` is already assumed to be the safe separator anyway.\r\n\r\nfixes #2033, closes #2059",
+    "patch": "@@ -638,18 +638,24 @@ def wiki_page(filename):\n     :raises: :class:`~werkzeug.exceptions.NotFound` if one or more passed\n             paths fall out of its boundaries.\n     \"\"\"\n+\n+    parts = [directory]\n+\n     for filename in pathnames:\n         if filename != '':\n             filename = posixpath.normpath(filename)\n-        for sep in _os_alt_seps:\n-            if sep in filename:\n-                raise NotFound()\n-        if os.path.isabs(filename) or \\\n-           filename == '..' or \\\n-           filename.startswith('../'):\n+\n+        if (\n+            any(sep in filename for sep in _os_alt_seps)\n+            or os.path.isabs(filename)\n+            or filename == '..'\n+            or filename.startswith('../')\n+        ):\n             raise NotFound()\n-        directory = os.path.join(directory, filename)\n-    return directory\n+\n+        parts.append(filename)\n+\n+    return posixpath.join(*parts)\n \n \n def send_from_directory(directory, filename, **options):",
+    "file_name": "flask/helpers.py",
+    "pr_number": 2284,
+    "pr_url": "https://github.com/pallets/flask/pull/2284"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2284,
+    "issue_title": "safe_join on Windows uses posixpath",
+    "issue_body": "Python on Windows supports mixed `/` and `\\` separators, so this doesn't break anything. `/` is already assumed to be the safe separator anyway.\r\n\r\nfixes #2033, closes #2059",
+    "patch": "@@ -903,21 +903,20 @@ def generate():\n \n \n class TestSafeJoin(object):\n-\n     def test_safe_join(self):\n         # Valid combinations of *args and expected joined paths.\n         passing = (\n-            (('a/b/c', ), 'a/b/c'),\n-            (('/', 'a/', 'b/', 'c/', ), '/a/b/c'),\n-            (('a', 'b', 'c', ), 'a/b/c'),\n-            (('/a', 'b/c', ), '/a/b/c'),\n-            (('a/b', 'X/../c'), 'a/b/c', ),\n-            (('/a/b', 'c/X/..'), '/a/b/c', ),\n+            (('a/b/c',), 'a/b/c'),\n+            (('/', 'a/', 'b/', 'c/'), '/a/b/c'),\n+            (('a', 'b', 'c'), 'a/b/c'),\n+            (('/a', 'b/c'), '/a/b/c'),\n+            (('a/b', 'X/../c'), 'a/b/c'),\n+            (('/a/b', 'c/X/..'), '/a/b/c'),\n             # If last path is '' add a slash\n-            (('/a/b/c', '', ), '/a/b/c/', ),\n+            (('/a/b/c', ''), '/a/b/c/'),\n             # Preserve dot slash\n-            (('/a/b/c', './', ), '/a/b/c/.', ),\n-            (('a/b/c', 'X/..'), 'a/b/c/.', ),\n+            (('/a/b/c', './'), '/a/b/c/.'),\n+            (('a/b/c', 'X/..'), 'a/b/c/.'),\n             # Base directory is always considered safe\n             (('../', 'a/b/c'), '../a/b/c'),\n             (('/..', ), '/..'),\n@@ -931,12 +930,12 @@ def test_safe_join_exceptions(self):\n         failing = (\n             # path.isabs and ``..'' checks\n             ('/a', 'b', '/c'),\n-            ('/a', '../b/c', ),\n+            ('/a', '../b/c'),\n             ('/a', '..', 'b/c'),\n             # Boundaries violations after path normalization\n-            ('/a', 'b/../b/../../c', ),\n+            ('/a', 'b/../b/../../c'),\n             ('/a', 'b', 'c/../..'),\n-            ('/a', 'b/../../c', ),\n+            ('/a', 'b/../../c'),\n         )\n \n         for args in failing:",
+    "file_name": "tests/test_helpers.py",
+    "pr_number": 2284,
+    "pr_url": "https://github.com/pallets/flask/pull/2284"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2254,
+    "issue_title": "Ensure error while opening session pops context",
+    "issue_body": "Reported in #1528. #1538 provided a solution, but can be simplified by only moving `ctx.push()` into the `try` block. Errors raised by `SessionInterface.open_session` and `.make_null_session` will be handled by the normal app error handling mechanism, and the context will be popped at the end of the request.",
+    "patch": "@@ -2002,10 +2002,10 @@ def wsgi_app(self, environ, start_response):\n                                exception context to start the response\n         \"\"\"\n         ctx = self.request_context(environ)\n-        ctx.push()\n         error = None\n         try:\n             try:\n+                ctx.push()\n                 response = self.full_dispatch_request()\n             except Exception as e:\n                 error = e",
+    "file_name": "flask/app.py",
+    "pr_number": 2254,
+    "pr_url": "https://github.com/pallets/flask/pull/2254"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2254,
+    "issue_title": "Ensure error while opening session pops context",
+    "issue_body": "Reported in #1528. #1538 provided a solution, but can be simplified by only moving `ctx.push()` into the `try` block. Errors raised by `SessionInterface.open_session` and `.make_null_session` will be handled by the normal app error handling mechanism, and the context will be popped at the end of the request.",
+    "patch": "@@ -12,6 +12,7 @@\n import pytest\n \n import flask\n+from flask.sessions import SessionInterface\n \n try:\n     from greenlet import greenlet\n@@ -193,3 +194,27 @@ def g():\n \n     result = greenlets[0].run()\n     assert result == 42\n+\n+\n+def test_session_error_pops_context():\n+    class SessionError(Exception):\n+        pass\n+\n+    class FailingSessionInterface(SessionInterface):\n+        def open_session(self, app, request):\n+            raise SessionError()\n+\n+    class CustomFlask(flask.Flask):\n+        session_interface = FailingSessionInterface()\n+\n+    app = CustomFlask(__name__)\n+\n+    @app.route('/')\n+    def index():\n+        # shouldn't get here\n+        assert False\n+\n+    response = app.test_client().get('/')\n+    assert response.status_code == 500\n+    assert not flask.request\n+    assert not flask.current_app",
+    "file_name": "tests/test_reqctx.py",
+    "pr_number": 2254,
+    "pr_url": "https://github.com/pallets/flask/pull/2254"
+  },
+  {
+    "repo": "pallets/flask",
+    "issue_number": 2242,
+    "issue_title": "get mtime in utc",
+    "issue_body": "Test `test_helpers.TestSendfile.test_send_file_range_request` was failing on my machine but not on Travis. Turned out it was sending the mtime of the file as local time, but comparing to a UTC time. Local time on Travis was UTC, so it didn't get caught there. Use `utcfromtimestamp` instead of `fromtimestamp`.",
+    "patch": "@@ -517,7 +517,7 @@ def index():\n         assert rv.status_code == 416\n         rv.close()\n \n-        last_modified = datetime.datetime.fromtimestamp(os.path.getmtime(\n+        last_modified = datetime.datetime.utcfromtimestamp(os.path.getmtime(\n             os.path.join(app.root_path, 'static/index.html'))).replace(\n             microsecond=0)\n ",
+    "file_name": "tests/test_helpers.py",
+    "pr_number": 2242,
+    "pr_url": "https://github.com/pallets/flask/pull/2242"
+  },
+  {
+    "repo": "scikit-learn/scikit-learn",
+    "issue_number": 30393,
+    "issue_title": "FIX test_csr_polynomial_expansion_index_overflow on [scipy-dev]",
+    "issue_body": "Fixes #30315, #30377 and partially #30378.\r\n\r\nWe probably want to backport this to 1.6.X.",
+    "patch": "@@ -1050,8 +1050,10 @@ def test_csr_polynomial_expansion_index_overflow(\n     `scipy.sparse.hstack`.\n     \"\"\"\n     data = [1.0]\n-    row = [0]\n-    col = [n_features - 1]\n+    # Use int32 indices as much as we can\n+    indices_dtype = np.int32 if n_features - 1 <= np.iinfo(np.int32).max else np.int64\n+    row = np.array([0], dtype=indices_dtype)\n+    col = np.array([n_features - 1], dtype=indices_dtype)\n \n     # First degree index\n     expected_indices = [",
+    "file_name": "sklearn/preprocessing/tests/test_polynomial.py",
+    "pr_number": 30393,
+    "pr_url": "https://github.com/scikit-learn/scikit-learn/pull/30393"
+  },
+  {
+    "repo": "scikit-learn/scikit-learn",
+    "issue_number": 30373,
+    "issue_title": "API drop Tags.regressor_tags.multi_label",
+    "issue_body": "Follow-up on #29677 discovered while reviewing #30187.\r\n\r\nLet's remove the field `tags.regressor_tags.multi_label` because:\r\n\r\n- it's meaningless;\r\n- it's redundant with `tags.target_tags.multi_output` automatically set by `MultioutputMixin` for regressors;\r\n- it does not map to any concept document in our glossary.\r\n\r\nNote that the bug was already present in `ForestRegressor._more_tags` before #29677, but since 1.6 is not released yet, let's fix this before making it officially part of our new Tag API.",
+    "patch": "@@ -1165,11 +1165,6 @@ def _compute_partial_dependence_recursion(self, grid, target_features):\n \n         return averaged_predictions\n \n-    def __sklearn_tags__(self):\n-        tags = super().__sklearn_tags__()\n-        tags.regressor_tags.multi_label = True\n-        return tags\n-\n \n class RandomForestClassifier(ForestClassifier):\n     \"\"\"",
+    "file_name": "sklearn/ensemble/_forest.py",
+    "pr_number": 30373,
+    "pr_url": "https://github.com/scikit-learn/scikit-learn/pull/30373"
+  },
+  {
+    "repo": "scikit-learn/scikit-learn",
+    "issue_number": 30373,
+    "issue_title": "API drop Tags.regressor_tags.multi_label",
+    "issue_body": "Follow-up on #29677 discovered while reviewing #30187.\r\n\r\nLet's remove the field `tags.regressor_tags.multi_label` because:\r\n\r\n- it's meaningless;\r\n- it's redundant with `tags.target_tags.multi_output` automatically set by `MultioutputMixin` for regressors;\r\n- it does not map to any concept document in our glossary.\r\n\r\nNote that the bug was already present in `ForestRegressor._more_tags` before #29677, but since 1.6 is not released yet, let's fix this before making it officially part of our new Tag API.",
+    "patch": "@@ -98,6 +98,8 @@ class TargetTags:\n         Whether a regressor supports multi-target outputs or a classifier supports\n         multi-class multi-output.\n \n+        See :term:`multi-output` in the glossary.\n+\n     single_output : bool, default=True\n         Whether the target can be single-output. This can be ``False`` if the\n         estimator supports only multi-output cases.\n@@ -150,8 +152,13 @@ class ClassifierTags:\n         classification. Therefore this flag indicates whether the\n         classifier is a binary-classifier-only or not.\n \n+        See :term:`multi-class` in the glossary.\n+\n     multi_label : bool, default=False\n-        Whether the classifier supports multi-label output.\n+        Whether the classifier supports multi-label output: a data point can\n+        be predicted to belong to a variable number of classes.\n+\n+        See :term:`multi-label` in the glossary.\n     \"\"\"\n \n     poor_score: bool = False\n@@ -172,13 +179,9 @@ class RegressorTags:\n         n_informative=1, bias=5.0, noise=20, random_state=42)``. The\n         dataset and values are based on current estimators in scikit-learn\n         and might be replaced by something more systematic.\n-\n-    multi_label : bool, default=False\n-        Whether the regressor supports multilabel output.\n     \"\"\"\n \n     poor_score: bool = False\n-    multi_label: bool = False\n \n \n @dataclass(**_dataclass_args())\n@@ -496,7 +499,6 @@ def _to_new_tags(old_tags, estimator=None):\n     if estimator_type == \"regressor\":\n         regressor_tags = RegressorTags(\n             poor_score=old_tags[\"poor_score\"],\n-            multi_label=old_tags[\"multilabel\"],\n         )\n     else:\n         regressor_tags = None\n@@ -520,18 +522,16 @@ def _to_old_tags(new_tags):\n     \"\"\"Utility function convert old tags (dictionary) to new tags (dataclass).\"\"\"\n     if new_tags.classifier_tags:\n         binary_only = not new_tags.classifier_tags.multi_class\n-        multilabel_clf = new_tags.classifier_tags.multi_label\n+        multilabel = new_tags.classifier_tags.multi_label\n         poor_score_clf = new_tags.classifier_tags.poor_score\n     else:\n         binary_only = False\n-        multilabel_clf = False\n+        multilabel = False\n         poor_score_clf = False\n \n     if new_tags.regressor_tags:\n-        multilabel_reg = new_tags.regressor_tags.multi_label\n         poor_score_reg = new_tags.regressor_tags.poor_score\n     else:\n-        multilabel_reg = False\n         poor_score_reg = False\n \n     if new_tags.transformer_tags:\n@@ -543,7 +543,7 @@ def _to_old_tags(new_tags):\n         \"allow_nan\": new_tags.input_tags.allow_nan,\n         \"array_api_support\": new_tags.array_api_support,\n         \"binary_only\": binary_only,\n-        \"multilabel\": multilabel_clf or multilabel_reg,\n+        \"multilabel\": multilabel,\n         \"multioutput\": new_tags.target_tags.multi_output,\n         \"multioutput_only\": (\n             not new_tags.target_tags.single_output and new_tags.target_tags.multi_output",
+    "file_name": "sklearn/utils/_tags.py",
+    "pr_number": 30373,
+    "pr_url": "https://github.com/scikit-learn/scikit-learn/pull/30373"
+  },
+  {
+    "repo": "scikit-learn/scikit-learn",
+    "issue_number": 30373,
+    "issue_title": "API drop Tags.regressor_tags.multi_label",
+    "issue_body": "Follow-up on #29677 discovered while reviewing #30187.\r\n\r\nLet's remove the field `tags.regressor_tags.multi_label` because:\r\n\r\n- it's meaningless;\r\n- it's redundant with `tags.target_tags.multi_output` automatically set by `MultioutputMixin` for regressors;\r\n- it does not map to any concept document in our glossary.\r\n\r\nNote that the bug was already present in `ForestRegressor._more_tags` before #29677, but since 1.6 is not released yet, let's fix this before making it officially part of our new Tag API.",
+    "patch": "@@ -4438,7 +4438,6 @@ def check_valid_tag_types(name, estimator):\n \n     if tags.regressor_tags is not None:\n         assert isinstance(tags.regressor_tags.poor_score, bool), err_msg\n-        assert isinstance(tags.regressor_tags.multi_label, bool), err_msg\n \n     if tags.transformer_tags is not None:\n         assert isinstance(tags.transformer_tags.preserves_dtype, list), err_msg",
+    "file_name": "sklearn/utils/estimator_checks.py",
+    "pr_number": 30373,
+    "pr_url": "https://github.com/scikit-learn/scikit-learn/pull/30373"
+  },
+  {
+    "repo": "scikit-learn/scikit-learn",
+    "issue_number": 30373,
+    "issue_title": "API drop Tags.regressor_tags.multi_label",
+    "issue_body": "Follow-up on #29677 discovered while reviewing #30187.\r\n\r\nLet's remove the field `tags.regressor_tags.multi_label` because:\r\n\r\n- it's meaningless;\r\n- it's redundant with `tags.target_tags.multi_output` automatically set by `MultioutputMixin` for regressors;\r\n- it does not map to any concept document in our glossary.\r\n\r\nNote that the bug was already present in `ForestRegressor._more_tags` before #29677, but since 1.6 is not released yet, let's fix this before making it officially part of our new Tag API.",
+    "patch": "@@ -434,7 +434,6 @@ def __sklearn_tags__(self):\n             classifier_tags = None\n             regressor_tags = RegressorTags(\n                 poor_score=True,\n-                multi_label=True,\n             )\n             return Tags(\n                 estimator_type=self._estimator_type,\n@@ -452,7 +451,7 @@ def __sklearn_tags__(self):\n         \"allow_nan\": True,\n         \"array_api_support\": False,\n         \"binary_only\": False,\n-        \"multilabel\": True,\n+        \"multilabel\": False,\n         \"multioutput\": True,\n         \"multioutput_only\": True,\n         \"no_validation\": False,",
+    "file_name": "sklearn/utils/tests/test_tags.py",
+    "pr_number": 30373,
+    "pr_url": "https://github.com/scikit-learn/scikit-learn/pull/30373"
+  },
+  {
+    "repo": "TheAlgorithms/Python",
+    "issue_number": 1745,
+    "issue_title": "Fixes LGTM issues",
+    "issue_body": "### **Describe your change:**\r\nFixes following LGTM issues\r\n1. [Implementing __eq__](https://lgtm.com/projects/g/TheAlgorithms/Python/snapshot/ee5e954b9ed82bbe885bf42bbc446c213a43bd4e/files/searches/hill_climbing.py#x2978473143457f06:1)\r\n2. [Multiple definitions](https://lgtm.com/projects/g/TheAlgorithms/Python/snapshot/ee5e954b9ed82bbe885bf42bbc446c213a43bd4e/files/dynamic_programming/max_sum_contiguous_subsequence.py?sort=name&dir=ASC&mode=heatmap#x5e72d15036130bb6:1)\r\n\r\n* [ ] Add an algorithm?\r\n* [x] Fix a bug or typo in an existing algorithm?\r\n* [ ] Documentation change?\r\n\r\n### **Checklist:**\r\n* [x] I have read [CONTRIBUTING.md](https://github.com/TheAlgorithms/Python/blob/master/CONTRIBUTING.md).\r\n* [ ] This pull request is all my own work -- I have not plagiarized.\r\n* [x] I know that pull requests will not be merged if they fail the automated tests.\r\n* [ ] This PR only changes one algorithm file.  To ease review, please open separate PRs for separate algorithms.\r\n* [ ] All new Python files are placed inside an existing directory.\r\n* [ ] All filenames are in all lowercase characters with no spaces or dashes.\r\n* [ ] All functions and variable names follow Python naming conventions.\r\n* [ ] All function parameters and return values are annotated with Python [type hints](https://docs.python.org/3/library/typing.html).\r\n* [ ] All functions have [doctests](https://docs.python.org/3/library/doctest.html) that pass the automated testing.\r\n* [ ] All new algorithms have a URL in its comments that points to Wikipedia or other similar explanation.\r\n* [ ] If this pull request resolves one or more open issues then the commit message contains `Fixes: #{$ISSUE_NO}`.\r\n",
+    "patch": "@@ -6,7 +6,7 @@ def max_subarray_sum(nums: list) -> int:\n     if not nums:\n         return 0\n     n = len(nums)\n-    s = [0] * n\n+\n     res, s, s_pre = nums[0], nums[0], nums[0]\n     for i in range(1, n):\n         s = max(nums[i], s_pre + nums[i])",
+    "file_name": "dynamic_programming/max_sum_contiguous_subsequence.py",
+    "pr_number": 1745,
+    "pr_url": "https://github.com/TheAlgorithms/Python/pull/1745"
+  },
+  {
+    "repo": "TheAlgorithms/Python",
+    "issue_number": 1745,
+    "issue_title": "Fixes LGTM issues",
+    "issue_body": "### **Describe your change:**\r\nFixes following LGTM issues\r\n1. [Implementing __eq__](https://lgtm.com/projects/g/TheAlgorithms/Python/snapshot/ee5e954b9ed82bbe885bf42bbc446c213a43bd4e/files/searches/hill_climbing.py#x2978473143457f06:1)\r\n2. [Multiple definitions](https://lgtm.com/projects/g/TheAlgorithms/Python/snapshot/ee5e954b9ed82bbe885bf42bbc446c213a43bd4e/files/dynamic_programming/max_sum_contiguous_subsequence.py?sort=name&dir=ASC&mode=heatmap#x5e72d15036130bb6:1)\r\n\r\n* [ ] Add an algorithm?\r\n* [x] Fix a bug or typo in an existing algorithm?\r\n* [ ] Documentation change?\r\n\r\n### **Checklist:**\r\n* [x] I have read [CONTRIBUTING.md](https://github.com/TheAlgorithms/Python/blob/master/CONTRIBUTING.md).\r\n* [ ] This pull request is all my own work -- I have not plagiarized.\r\n* [x] I know that pull requests will not be merged if they fail the automated tests.\r\n* [ ] This PR only changes one algorithm file.  To ease review, please open separate PRs for separate algorithms.\r\n* [ ] All new Python files are placed inside an existing directory.\r\n* [ ] All filenames are in all lowercase characters with no spaces or dashes.\r\n* [ ] All functions and variable names follow Python naming conventions.\r\n* [ ] All function parameters and return values are annotated with Python [type hints](https://docs.python.org/3/library/typing.html).\r\n* [ ] All functions have [doctests](https://docs.python.org/3/library/doctest.html) that pass the automated testing.\r\n* [ ] All new algorithms have a URL in its comments that points to Wikipedia or other similar explanation.\r\n* [ ] If this pull request resolves one or more open issues then the commit message contains `Fixes: #{$ISSUE_NO}`.\r\n",
+    "patch": "@@ -4,17 +4,18 @@\n \n class SearchProblem:\n     \"\"\"\n-    A interface to define search problems. The interface will be illustrated using\n-        the example of mathematical function.\n+    An interface to define search problems.\n+    The interface will be illustrated using the example of mathematical function.\n     \"\"\"\n \n     def __init__(self, x: int, y: int, step_size: int, function_to_optimize):\n         \"\"\"\n         The constructor of the search problem.\n-            x: the x coordinate of the current search state.\n-            y: the y coordinate of the current search state.\n-            step_size: size of the step to take when looking for neighbors.\n-            function_to_optimize: a function to optimize having the signature f(x, y).\n+\n+        x: the x coordinate of the current search state.\n+        y: the y coordinate of the current search state.\n+        step_size: size of the step to take when looking for neighbors.\n+        function_to_optimize: a function to optimize having the signature f(x, y).\n         \"\"\"\n         self.x = x\n         self.y = y\n@@ -63,6 +64,14 @@ def __hash__(self):\n         \"\"\"\n         return hash(str(self))\n \n+    def __eq__(self, obj):\n+        \"\"\"\n+        Check if the 2 objects are equal.\n+        \"\"\"\n+        if isinstance(obj, SearchProblem):\n+            return hash(str(self)) == hash(str(obj))\n+        return False\n+\n     def __str__(self):\n         \"\"\"\n         string representation of the current search state.\n@@ -85,10 +94,11 @@ def hill_climbing(\n     max_iter: int = 10000,\n ) -> SearchProblem:\n     \"\"\"\n-    implementation of the hill climbling algorithm. We start with a given state, find\n-        all its neighbors, move towards the neighbor which provides the maximum (or\n-        minimum) change. We keep doing this until we are at a state where we do not\n-        have any neighbors which can improve the solution.\n+    Implementation of the hill climbling algorithm.\n+    We start with a given state, find all its neighbors,\n+    move towards the neighbor which provides the maximum (or minimum) change.\n+    We keep doing this until we are at a state where we do not have any\n+    neighbors which can improve the solution.\n         Args:\n             search_prob: The search state at the start.\n             find_max: If True, the algorithm should find the maximum else the minimum.",
+    "file_name": "searches/hill_climbing.py",
+    "pr_number": 1745,
+    "pr_url": "https://github.com/TheAlgorithms/Python/pull/1745"
+  },
+  {
+    "repo": "TheAlgorithms/Python",
+    "issue_number": 1634,
+    "issue_title": "Bug Fixed in newton_raphson_method.py",
+    "issue_body": "Without using math function,function like sin and exp cannot be evaluated.\r\nAdding PRECISION variable explicitly helps user to play with precision.",
+    "patch": "@@ -0,0 +1,40 @@\n+# Implementing Newton Raphson method in Python\n+# Author: Syed Haseeb Shah (github.com/QuantumNovice)\n+# The Newton-Raphson method (also known as Newton's method) is a way to\n+# quickly find a good approximation for the root of a real-valued function\n+\n+from decimal import Decimal\n+from math import *  # noqa: F401, F403\n+from sympy import diff\n+\n+\n+def newton_raphson(func: str, a: int, precision: int=10 ** -10) -> float:\n+    \"\"\" Finds root from the point 'a' onwards by Newton-Raphson method\n+    >>> newton_raphson(\"sin(x)\", 2)\n+    3.1415926536808043\n+    >>> newton_raphson(\"x**2 - 5*x +2\", 0.4)\n+    0.4384471871911695\n+    >>> newton_raphson(\"x**2 - 5\", 0.1)\n+    2.23606797749979\n+    >>> newton_raphson(\"log(x)- 1\", 2)\n+    2.718281828458938\n+    \"\"\"\n+    x = a\n+    while True:\n+        x = Decimal(x) - (Decimal(eval(func)) / Decimal(eval(str(diff(func)))))\n+        # This number dictates the accuracy of the answer\n+        if abs(eval(func)) < precision:\n+            return float(x)\n+\n+\n+# Let's Execute\n+if __name__ == \"__main__\":\n+    # Find root of trigonometric function\n+    # Find value of pi\n+    print(f\"The root of sin(x) = 0 is {newton_raphson('sin(x)', 2)}\")\n+    # Find root of polynomial\n+    print(f\"The root of x**2 - 5*x + 2 = 0 is {newton_raphson('x**2 - 5*x + 2', 0.4)}\")\n+    # Find Square Root of 5\n+    print(f\"The root of log(x) - 1 = 0 is {newton_raphson('log(x) - 1', 2)}\")\n+    # Exponential Roots\n+    print(f\"The root of exp(x) - 1 = 0 is {newton_raphson('exp(x) - 1', 0)}\")",
+    "file_name": "arithmetic_analysis/newton_raphson.py",
+    "pr_number": 1634,
+    "pr_url": "https://github.com/TheAlgorithms/Python/pull/1634"
+  },
+  {
+    "repo": "TheAlgorithms/Python",
+    "issue_number": 1634,
+    "issue_title": "Bug Fixed in newton_raphson_method.py",
+    "issue_body": "Without using math function,function like sin and exp cannot be evaluated.\r\nAdding PRECISION variable explicitly helps user to play with precision.",
+    "patch": "@@ -1,34 +0,0 @@\n-# Implementing Newton Raphson method in Python\n-# Author: Syed Haseeb Shah (github.com/QuantumNovice)\n-# The Newton-Raphson method (also known as Newton's method) is a way to\n-# quickly find a good approximation for the root of a real-valued function\n-from sympy import diff\n-from decimal import Decimal\n-\n-\n-def NewtonRaphson(func, a):\n-    \"\"\" Finds root from the point 'a' onwards by Newton-Raphson method \"\"\"\n-    while True:\n-        c = Decimal(a) - (Decimal(eval(func)) / Decimal(eval(str(diff(func)))))\n-\n-        a = c\n-\n-        # This number dictates the accuracy of the answer\n-        if abs(eval(func)) < 10 ** -15:\n-            return c\n-\n-\n-# Let's Execute\n-if __name__ == \"__main__\":\n-    # Find root of trigonometric function\n-    # Find value of pi\n-    print(\"sin(x) = 0\", NewtonRaphson(\"sin(x)\", 2))\n-\n-    # Find root of polynomial\n-    print(\"x**2 - 5*x +2 = 0\", NewtonRaphson(\"x**2 - 5*x +2\", 0.4))\n-\n-    # Find Square Root of 5\n-    print(\"x**2 - 5 = 0\", NewtonRaphson(\"x**2 - 5\", 0.1))\n-\n-    # Exponential Roots\n-    print(\"exp(x) - 1 = 0\", NewtonRaphson(\"exp(x) - 1\", 0))",
+    "file_name": "arithmetic_analysis/newton_raphson_method.py",
+    "pr_number": 1634,
+    "pr_url": "https://github.com/TheAlgorithms/Python/pull/1634"
+  },
+  {
+    "repo": "TheAlgorithms/Python",
+    "issue_number": 301,
+    "issue_title": "Create merge_sort_fastest.py",
+    "issue_body": "Python implementation of merge sort algorithm.\r\nTakes an average of 0.6 microseconds to sort a list of length 1000 items.\r\nBest Case Scenario : O(n)\r\nWorst Case Scenario : O(n)",
+    "patch": "@@ -0,0 +1,19 @@\n+'''\n+Python implementation of merge sort algorithm.\n+Takes an average of 0.6 microseconds to sort a list of length 1000 items.\n+Best Case Scenario : O(n)\n+Worst Case Scenario : O(n)\n+'''\n+def merge_sort(LIST):\n+    start = []\n+    end = []\n+    while len(LIST) > 1:\n+        a = min(LIST)\n+        b = max(LIST)\n+        start.append(a)\n+        end.append(b)\n+        LIST.remove(a)\n+        LIST.remove(b)\n+    if LIST: start.append(LIST[0])\n+    end.reverse()\n+    return (start + end)",
+    "file_name": "sorts/merge_sort_fastest.py",
+    "pr_number": 301,
+    "pr_url": "https://github.com/TheAlgorithms/Python/pull/301"
+  }
+]
