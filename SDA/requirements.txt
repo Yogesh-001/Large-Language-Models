@@ -1,0 +1,14 @@
+# Core libraries
+torch>=2.1.0
+transformers>=4.39.0
+accelerate>=0.27.0
+datasets
+peft>=0.9.0
+bitsandbytes
+
+# For CLI or API
+fastapi==0.110.1
+uvicorn[standard]==0.27.1
+
+# Optional (for dev)
+python-dotenv
